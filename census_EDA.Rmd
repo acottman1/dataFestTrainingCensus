@@ -1,0 +1,25 @@
+---
+title: "censusEDA"
+author: "Aron Cottman"
+date: "2/12/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(plotly)
+library(janitor)
+
+```
+
+fetch the data
+```{r}
+getwd()
+trackData <- read_csv('pdb2019trv6_us.csv')
+blockData <- read_csv('pdb2019bgv6_us.csv')
+str(trackData)
+trackHead <- trackData[1:5,]
+View(trackHead)
+```
+
