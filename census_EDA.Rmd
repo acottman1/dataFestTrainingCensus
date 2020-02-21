@@ -10,7 +10,6 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(plotly)
 library(janitor)
-
 ```
 
 fetch the data
@@ -18,8 +17,64 @@ fetch the data
 getwd()
 trackData <- read_csv('pdb2019trv6_us.csv')
 blockData <- read_csv('pdb2019bgv6_us.csv')
-str(trackData)
+
 trackHead <- trackData[1:5,]
+blockHead <- blockData[1:5,]
 View(trackHead)
+View(blockHead)
+str(trackData)
+```
+```{r}
+lowResponse <- blockData %>% select(State,County, Block_group, Mail_Return_Rate_CEN_2010 , Low_Response_Score) %>% na.omit(cols = 4:5)
+View(lowResponse)
+summary(lowResponse)
+
+```
+```{r}
+install.packages('devtools')
+library(devtools)
+
+```
+```{r}
+library(usmap)
+countyLow <- blockData %>% select(State,County, Mail_Return_Rate_CEN_2010) %>% mutate(
+  fips = paste0(State, County),
+  State = NULL,
+  County = NULL,
+  returnRate = Mail_Return_Rate_CEN_2010,
+  Mail_Return_Rate_CEN_2010 = NULL) %>% na.omit(cols = 2)
+
+stateLow <- blockData %>% select(State, Mail_Return_Rate_CEN_2010) %>% transmute(
+  fips = State,
+  returnRate = Mail_Return_Rate_CEN_2010) %>% na.omit(cols = 2) #take mean of group by state data
+plot_usmap(regions = "counties",
+           data = stateLow,
+           values = 'returnRate')
+            labs(title = "US Counties",
+                 subtitle = "did it!.")
+```
+
+Notes:
+1) approach is to throw a bunch of stuuff into a model, and 
+
+
+1) how to figure out what is important
+2) how to figureout what is feasable
+3) how to measure the effectiveness
+4) how it will bennefit the company
+
+runn a clustering againrt top 10% of return rate score svm's PCA
+simpl features and tidy census
+By  
+
+
+onday
+
+```{r}
+dmvBlock 
+
+
+dmvTrack <- trackData %>% filter(State_name %in% c("Virgina", "Maryland", "District of Colombia") ) 
+
 ```
 
