@@ -10,49 +10,88 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(plotly)
 library(janitor)
+library(dplyr)
+library(stringr)
 ```
 
 fetch the data
 ```{r}
 getwd()
-trackData <- read_csv('pdb2019trv6_us.csv')
+#trackData <- read_csv('pdb2019trv6_us.csv')
 blockData <- read_csv('pdb2019bgv6_us.csv')
 
-trackHead <- trackData[1:5,]
+#trackHead <- trackData[1:5,]
 blockHead <- blockData[1:5,]
-View(trackHead)
+#View(trackHead)
 View(blockHead)
-str(trackData)
+#str(trackData)
+#filter the data
+BlockDMV <- blockData %>% filter(State_name %in% c("Virgina", "Maryland", "District of Colombia") )
+View(head(blockData))
+#clan up the income variables
+
+
+#create list of colun numbers to select for ages
+BlockAgeDMV <- BlockDMV %>% select(c(1:9, 193, 196, 199, 202, 205, 208, 211, 214),Low_Response_Score)
+BlockRaceDMV <- BlockDMV %>% select(c(1:9, 220, 223, 226, 229, 232, 235, 238 ),Low_Response_Score)
+BlockLangDMV <- BlockDMV %>% select(c(1:9, 242, 262, 264, 266, 268, 270, 272),Low_Response_Score)
+BlockHousingDMV <- BlockDMV %>% select(c(1:9, 301,314, 317, 319, 321, 323, 325, 328, 335),Low_Response_Score)
+BlockIncomeDMV <- BlockDMV %>% select(c(1:9, 303, 305),Low_Response_Score)
+moneyValues <- select(BlockDMV,c(335, 305))
+DMVglm <- BlockDMV %>% select(c(1:7,9,193, 196, 199, 202, 205, 208, 211, 214,  220, 223, 226, 229, 232, 235, 238, 242, 262, 264, 266, 268, 270, 272, 301,314, 317, 319, 321, 323, 325, 328, 303, 335, 305 ), Low_Response_Score)
+dat <- BlockDMV %>% select(c(193, 196, 199, 202, 205, 208, 211, 214,  220, 223, 226, 229, 232, 235, 238, 242, 262, 264, 266, 268, 270, 272, 301,314, 317, 319, 321, 323, 325, 328, 303, 335, 305 ), Low_Response_Score)
+str(DMVglm)
 ```
+
 ```{r}
-lowResponse <- blockData %>% select(State,County, Block_group, Mail_Return_Rate_CEN_2010 , Low_Response_Score) %>% na.omit(cols = 4:5)
-View(lowResponse)
-summary(lowResponse)
+AgeNames <- colnames(BlockAgeDMV)
+#Visualize the data
+lapply(list(AgeNames),
+       function(i) ggplot(BlockAgeDMV, aes_string(x=i, y = "Low_Response_Score")) + geom_point())
+  
+lapply(list("value1","value2"), 
+       function(i) ggplot(df1, aes_string(x=i, y="response")) + geom_point())
+
 
 ```
 ```{r}
-install.packages('devtools')
-library(devtools)
+AgeGatherDMV<- gather(BlockAgeDMV, pct_Males_ACS_13_17:pct_Pop_65plus_ACS_13_17,  key = "Age_Groups", 
+            value = "Percentages")
+
+ggplot(AgeGatherDMV, aes(x= Percentages, y = Low_Response_Score))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Age_Groups, scales = "free_x")
 
 ```
 ```{r}
-library(usmap)
-countyLow <- blockData %>% select(State,County, Mail_Return_Rate_CEN_2010) %>% mutate(
-  fips = paste0(State, County),
-  State = NULL,
-  County = NULL,
-  returnRate = Mail_Return_Rate_CEN_2010,
-  Mail_Return_Rate_CEN_2010 = NULL) %>% na.omit(cols = 2)
+LangGather <- gather(BlockLangDMV, pct_Othr_Lang_ACS_13_17:pct_ENG_VW_ACS_13_17, key = "langGroup", value = "Percentage")
 
-stateLow <- blockData %>% select(State, Mail_Return_Rate_CEN_2010) %>% transmute(
-  fips = State,
-  returnRate = Mail_Return_Rate_CEN_2010) %>% na.omit(cols = 2) #take mean of group by state data
-plot_usmap(regions = "counties",
-           data = stateLow,
-           values = 'returnRate')
-            labs(title = "US Counties",
-                 subtitle = "did it!.")
+ggplot(LangGather, aes(x= Percentage, y = Low_Response_Score))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~langGroup, scales = "free_x")
+
+
+
 ```
+
+```{r}
+GatherRace <- gather(BlockRaceDMV, pct_Hispanic_ACS_13_17:pct_NH_SOR_alone_ACS_13_17, key  = "Race", value = "Percent" )
+
+ggplot(GatherRace, aes(x= Percent, y = Low_Response_Score))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  facet_wrap(~Race, scales = "free_x")
+
+```
+
+
+
+
+
+
+
 
 Notes:
 1) approach is to throw a bunch of stuuff into a model, and 
@@ -77,4 +116,58 @@ dmvBlock
 dmvTrack <- trackData %>% filter(State_name %in% c("Virgina", "Maryland", "District of Colombia") ) 
 
 ```
+
+```{r}
+moneyValues
+#rempove the omney sign
+sub_str(as.character(columnhere), 2, str_length(as.character("columnhere")))
+
+as.numeric(gsub(",","",columnname))
+?str_sub()
+#remove 
+#remove the $ sign
+d<-str_sub(as.character(moneyValues$avg_Agg_House_Value_ACS_13_17),2, str_length(moneyValues$avg_Agg_House_Value_ACS_13_17))
+
+e<-str_sub(as.character(moneyValues$avg_Agg_HH_INC_ACS_13_17),2, str_length(moneyValues$avg_Agg_HH_INC_ACS_13_17))
+
+#remove the commas
+as.numeric(moneyValues)
+```
+
+
+```{r}
+
+#glm model
+install.packages("glmnet")
+library(glmnet)
+DMVglm <- DMVglm %>% select(-Flag) %>% drop_na()
+summary(DMVglm)
+str(DMVglm)
+
+x <- select(DMVglm,9:39, -pct_Pop_65plus_ACS_13_17) %>% data.matrix()
+y <- DMVglm$Low_Response_Score
+
+lambdas <- 10^seq(3, -2, by = -.1)
+fit <- glmnet(x, y, alpha = 0, lambda = lambdas)
+summary(fit)
+
+cv_fit <- cv.glmnet(x,y,alpha = .1502, lambda = lambdas)
+plot(cv_fit)
+glmCoef <- coef(cv_fit, s = cv_fit$lambda.1se)
+glmCoef
+View(fit$beta)
+
+```
+
+
+```{r}
+
+
+
+
+```
+
+
+
+
 
