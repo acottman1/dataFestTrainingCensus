@@ -1,0 +1,309 @@
+---
+title: "Census_Income/insurance/Education"
+author: "VI Nguyen"
+date: "2/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+tract_2019 <- read.csv('tract_2019.csv', header = TRUE)
+```
+
+```{r}
+head(tract_2019)
+```
+```{r}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(broom))
+suppressPackageStartupMessages(library(modelr))
+```
+
+```{r}
+unique(tract_2019$State_name)
+```
+
+
+MODEL: FEED THE PERCENTAGES IN THE MODEL AND DO SEE IF THERE IS ANY CORRELATION BETWEEEN THE RESPONSE RATE AND THE PERCENT OF POPULATION
+% VS %
+
+MINIMIZE THE CONFOUNDING FACTORS BY RUNNING THE MODEL ON ONE FACTOR AT A TIME
+--> SOMETHING DOABLE
+--> LANGUAGW: LOW RESPONSE RATE IN DENSE CULTURAL POPULATION
+--> AWK
+READ IN THE
+support vector machine
+PCA - great for feature reduction and suspected correlated variables
+
+```{r}
+dmv_tract <- tract_2019 %>%
+  filter(State_name == 'Virginia' | State_name == 'Maryland' | State_name == 'District of Columbia')
+names(dmv_tract)
+```
+
+Find column index:
+
+ind <- match(c('Low_Response_Score'), names(dmv_tract))
+ind
+
+```{r}
+## Extract necessary columns
+
+dmv_others <- dmv_tract %>%
+  select( c((3), (468), (220:223), (105), (377),(139), (379:384), (371:373), (284)))
+  ## Column 3 is State_name
+dmv_others
+```
+
+
+```{r}
+## Remove all Margin of Error (MOE) columns
+
+dmv_others <- dmv_others %>%
+  select(-contains('MOE'))
+
+head(dmv_others)
+```
+
+```{r}
+dmv_tract %>%
+  filter(pct_Prs_Blw_Pov_Lev_ACS_13_17 > 98)
+```
+
+```{r}
+## Rate of college students vs. Response rate
+
+dmv_others  %>%
+  ggplot() +
+  geom_smooth(mapping = aes(x = pct_College_ACS_13_17, y = Low_Response_Score, color = State_name), se = TRUE)
+```
+
+```{r}
+dmv_others %>%
+  ggplot(mapping = aes(x = pct_College_ACS_13_17, y = Low_Response_Score, color = State_name)) +
+  geom_point(alpha = 0.5, size = 0.5) +
+  geom_smooth(color = 'black', se = FALSE) + 
+  facet_grid(.~State_name)
+```
+
+```{r}
+dc <- dmv_others %>%
+  filter(State_name == 'District of Columbia')
+cor.test(dc$pct_College_ACS_13_17, dc$Low_Response_Score)
+```
+
+```{r}
+dmv_others %>%
+  filter(State_name == 'Virginia') %>%
+  ggplot() +
+  geom_boxplot(mapping = aes(x = "", y = pct_College_ACS_13_17)) + 
+  coord_flip() 
+```
+
+## Sampling
+
+```{r}
+count <- dmv_others %>%
+  group_by(State_name) %>%
+  summarize(count = n())
+count
+```
+
+```{r}
+## Sample size of 2/3 the population
+
+## DC
+sample_size_dc <- floor(.68 * count$count[1])
+
+## Maryland
+sample_size_md <- floor(.68 * count$count[2])
+
+## Virginia
+sample_size_va <- floor(.68 * count$count[3])
+```
+
+```{r}
+## Create indeces
+sample_dc_ind <- sample(1:count$count[1], sample_size_dc)
+sample_md_ind <- sample(1:count$count[2], sample_size_md)
+sample_va_ind <- sample(1:count$count[3], sample_size_va)
+
+## Generate random samples
+sample_va <- filter(dmv_others, State_name == 'Virginia')[sample_va_ind,]
+sample_md <- filter(dmv_others, State_name == 'Maryland')[sample_md_ind,]
+sample_dc <- filter(dmv_others, State_name == 'District of Columbia')[sample_dc_ind,]
+```
+
+```{r}
+sample_va %>%
+  ggplot(mapping = aes(x = pct_College_ACS_13_17, y = Low_Response_Score, alpha = 0.5)) +
+  geom_point() +
+  labs(title = "VA") +
+  geom_smooth(method = "lm")
+cor.test(sample_va$pct_College_ACS_13_17, sample_va$Low_Response_Score)
+
+
+sample_md %>%
+  ggplot(mapping = aes(x = pct_College_ACS_13_17, y = Low_Response_Score, alpha = 0.5)) +
+  geom_point() +
+  labs(title = "MD" )+
+  geom_smooth(method = "lm")
+cor.test(sample_md$pct_College_ACS_13_17, sample_md$Low_Response_Score)
+
+
+sample_dc %>%
+  ggplot(mapping = aes(x = pct_College_ACS_13_17, y = Low_Response_Score)) +
+  geom_point() +
+  labs(title = "DC") +
+  geom_smooth(method = "lm")
+cor.test(sample_dc$pct_College_ACS_13_17, sample_dc$Low_Response_Score)
+```
+```{r}
+## Model relationship between % of people in college and low response score
+
+college_model <- lm(Low_Response_Score ~ pct_College_ACS_13_17, data = dmv_others)
+college_model%>%
+  glance()
+```
+
+################################################################################################################################################
+
+## Income
+
+```{r}
+## Model relationship between income and low response score
+
+library(modelr)
+library(broom)
+
+income_model <- lm(Low_Response_Score ~ Med_HHD_Inc_ACS_13_17, data = dmv_others)
+income_model %>%
+  glance()
+```
+
+```{r}
+dmv_others <- dmv_tract %>%
+  select( c((3), (468), (220:223), (105), (377),(139), (379:384), (371:373), (284)))
+  ## Column 3 is State_name
+dmv_others <- dmv_others %>%
+  select(-contains('MOE'))
+head(dmv_others)
+```
+
+```{r}
+## Remove the dollar signs
+
+require(stringr)
+ ## head(str_sub(as.character(dmv_others$Med_HHD_Inc_ACS_13_17), 2, str_length(as.character(dmv_others$Med_HHD_Inc_ACS_13_17))))
+dmv_others$Med_HHD_Inc_ACS_13_17 <- str_sub(as.character(dmv_others$Med_HHD_Inc_ACS_13_17), 2, str_length(as.character(dmv_others$Med_HHD_Inc_ACS_13_17)))
+head(dmv_others)
+```
+
+```{r}
+## Group income into low, lower middle, middle, upper middle, upper clases
+
+dmv_others <- dmv_others %>%
+  mutate(Income_level = 
+  case_when(as.numeric(gsub(",", "", Med_HHD_Inc_ACS_13_17)) < 31000 ~ "Low income",
+            between(as.numeric(gsub(",", "", Med_HHD_Inc_ACS_13_17)), 31000, 42000) ~ "Lower Middle class",
+           between(as.numeric(gsub(",", "", Med_HHD_Inc_ACS_13_17)), 42000, 126000) ~ "Middle class",
+            between(as.numeric(gsub(",", "", Med_HHD_Inc_ACS_13_17)), 126000, 188000) ~ "Upper Middle class",
+           as.numeric(gsub(",", "", Med_HHD_Inc_ACS_13_17)) > 188000 ~ "Upper class"
+            
+))
+dmv_others
+
+```
+
+```{r}
+library(forcats)
+dmv_others$Income_level <- fct_relevel(dmv_others$Income_level, "Low income", "Lower Middle class", "Middle class", "Upper Middle class")
+dmv_others %>%
+  ggplot() +
+  geom_point(mapping = aes(x = Med_HHD_Inc_ACS_13_17, y = Low_Response_Score, color = Income_level)) 
+```
+
+```{r}
+library(forcats)
+dmv_others$Income_level <- fct_relevel(dmv_others$Income_level, "Low income", "Lower Middle class", "Middle class", "Upper Middle class")
+dmv_others%>%
+  ggplot() + 
+  geom_boxplot(mapping = aes(y = Low_Response_Score , x = Income_level))
+```
+
+```{r}
+write_csv(dmv_others, path ="dmv_others.csv")
+```
+
+```{r}
+cov_income_model <- aov(dmv_others$Low_Response_Score ~ dmv_others$Income_level)
+cov_income_model
+```
+
+```{r}
+dmv_others%>%
+  filter(!is.na(Income_level))
+```
+```{r}
+anova_one_way <- aov(Low_Response_Score ~ Income_level, data = dmv_others)
+summary(anova_one_way)
+```
+
+
+### Household receiving public assistance
+```{r, figsize = 20, figwidth = 8}
+dmv_others %>%
+  ggplot(mapping = aes(x = pct_PUB_ASST_INC_ACS_13_17, y = Low_Response_Score), scale = x_0
+         ) +
+  geom_point() +
+  geom_smooth() 
+```
+
+```{r, figwidth = 10}
+dmv_others %>%
+  ggplot(mapping = aes(x = pct_PUB_ASST_INC_ACS_13_17, y = Low_Response_Score)) +
+  geom_point(size = 0.5, alpha = 0.5) +
+  xlim(c(0,20)) +
+  geom_smooth(span = 0.2) 
+```
+
+###############################################################################################################################################
+
+## Health Insurance
+```{r}
+insur <- dmv_others[c('State_name', 'pct_One_Health_Ins_ACS_13_17', 'pct_TwoPHealthIns_ACS_13_17', 'pct_No_Health_Ins_ACS_13_17', 'Low_Response_Score')]
+
+insur_ref <- insur %>%
+  gather(pct_One_Health_Ins_ACS_13_17:pct_No_Health_Ins_ACS_13_17, key = 'Insurance', value = 'Value')
+```
+
+```{r, fig.width = 15}
+insur_ref %>%
+  ggplot(mapping = aes(x = Value, y = Low_Response_Score, color = Insurance)) +
+  geom_point() +
+  facet_grid(.~State_name)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
