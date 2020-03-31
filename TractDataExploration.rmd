@@ -1,0 +1,303 @@
+---
+author: "Liying Lu"
+title: "Tract Data Exploration"
+output: html_notebook
+---
+```{r}
+library(dplyr)
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(corrplot)
+library(ggpubr)
+```
+
+
+## What advice would you give local governments who wish to improve the response to the 2020 census?
+```{r}
+# import data
+tractData <- read.csv("~/PersonalProject/DataFestPrep/data/2019PlanningDatabaseTractData/pdb2019trv6_us.csv")
+```
+```{r}
+names(tractData)
+```
+
+Get a smaller dataset by subsetting only the data in DMV region. D.C. Maryland and Virginia. 
+```{r}
+tractDMV <- tractData %>%
+  filter(State_name=="Virginia" |
+           State_name=="Maryland" | 
+           State_name=="District of Columbia")
+
+head(tractDMV)
+```
+
+Summary statistics of the low_response_score on each state.
+```{r}
+print(summary(tractDMV$Low_Response_Score))
+maryland <- filter(tractDMV, State_name=="Maryland")
+print(summary(maryland$Low_Response_Score))
+virginia <- filter(tractDMV, State_name=="Virginia")
+print(summary(virginia$Low_Response_Score))
+dc <- filter(tractDMV, State_name=="District of Columbia")
+print(summary(dc$Low_Response_Score))
+```
+
+### Cultural: Race, Language spoken, Citizenship
+**Total Population**: Columns 14, 15
+**Low Response Rate**: Columns 284
+**Race**: Columns 46-66
+**Language spoken**: Columns 69-96 and 179-188
+**Citizenship**: Columns 145-152
+```{r}
+# get the cultural dataset for DMV region
+dmv_cultural <- tractDMV %>% select(c(3,5,284,(14:15),(46:66),(69:96), (179:188), (145:152)))
+dmv_race <- tractDMV %>% select(c(3,5,284,(46:66)))
+dmv_lang <- tractDMV %>% select(c(3,5,284,(69:96), (179:188)))
+dmv_citizen <- tractDMV %>% select(c(284, (145:152)))
+dmv_pop <- tractDMV %>% select((14:15))
+```
+
+## Race
+```{r}
+dmv_race <- dmv_race %>%
+  select(-contains("MOE"))
+#names(dmv_race)
+pop <- dmv_pop$Tot_Population_ACS_13_17
+dmv_race_pct <- data.frame(
+  state = dmv_race$State_name,
+  low_response_rate = dmv_race$Low_Response_Score,         # response rate
+  white = dmv_race$NH_White_alone_ACS_13_17 / pop, # white
+  black = dmv_race$NH_Blk_alone_ACS_13_17 / pop,   # black or African American
+  aian = dmv_race$NH_AIAN_alone_ACS_13_17 / pop,   # American Indian and Alaska Native
+  asian = dmv_race$NH_Asian_alone_ACS_13_17 / pop, # Asian
+  native_hawaiian_PI = dmv_race$NH_NHOPI_alone_ACS_13_17 / pop, # Native Hawaiian and other Pacific Islander
+  other = dmv_race$NH_SOR_alone_ACS_13_17 / pop    # Some other race
+  )
+unique(dmv_race_pct$state)
+```
+```{r}
+dmv_race_pct <- dmv_race_pct %>%
+  gather(key = "race", value = "pct", -c(state,low_response_rate))
+dmv_race_pct
+```
+
+```{r}
+race_stats <- data.frame(summary(dmv_race_pct))
+dmv_race_pct %>%
+  ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
+  geom_point(alpha = 0.35) +
+  geom_smooth(color = "black", alpha = 0.8, se=TRUE, method = "lm") +
+  facet_wrap(~race, nrow=2, scale = "free_x")
+```
+```{r, fig.asp=1, fig.width=10}
+race_stats <- data.frame(summary(dmv_race_pct))
+dmv_race_pct %>%
+  ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
+  geom_point(alpha = 0.35) +
+  geom_smooth(color = "black", alpha = 0.8, se=TRUE, method = "lm") +
+  facet_wrap(~race*state, nrow=2, scale = "free_x")
+```
+
+```{r}
+dmv_race_pct %>%
+  filter(!(race == "white" | race == "black" )) %>%
+  ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
+  geom_point(alpha = 0.35) +
+  geom_smooth(color = "black", alpha = 0.8, se=TRUE) +
+  facet_wrap(~race, nrow=2, scale = "free_x")
+```
+
+```{r}
+# create a linear model for the black and white race
+race_black <- dmv_race_pct %>% filter(race == "black")
+lm_black <- lm(low_response_rate ~ pct, data = race_black)
+summary(lm_black)
+```
+```{r}
+cor.test(race_black$low_response_rate, race_black$pct)
+```
+```{r}
+lm_black2 <- lm(low_response_rate ~ pct * state, data = race_black)
+summary(lm_black2)
+```
+
+
+```{r}
+# create a linear model for the black and white race
+race_white <- dmv_race_pct %>% filter(race == "white")
+lm_white <- lm(low_response_rate ~ pct, data = race_white)
+summary(lm_white)
+```
+```{r}
+cor.test(race_white$low_response_rate, race_white$pct)
+```
+```{r}
+lm_white2 <- lm(low_response_rate ~ pct + state, data = race_white)
+summary(lm_white2)
+```
+```{r}
+unique(dmv_lang$State_name)
+names(dmv_lang)
+```
+
+
+```{r}
+# person of age 5 years or older who speak english less than very well who speak ----.  
+dmv_lang_pct <- data.frame(
+  state = dmv_lang$State_name,
+  low_response_rate = dmv_lang$Low_Response_Score,
+  english = dmv_lang$Age5p_Only_English_ACS_13_17 / pop,
+  spanish = dmv_lang$Age5p_Spanish_ACS_13_17 / pop,
+  french = dmv_lang$Age5p_French_ACS_13_17 / pop,
+  german = dmv_lang$Age5p_German_ACS_13_17 / pop,
+  chinese = dmv_lang$Age5p_Chinese_ACS_13_17 / pop,
+  russian = dmv_lang$Age5p_Russian_ACS_13_17 / pop,
+  viet = dmv_lang$Age5p_Vietnamese_ACS_13_17 / pop,
+  arabic = dmv_lang$Age5p_Arabic_ACS_13_17 / pop,
+  korean = dmv_lang$Age5p_Korean_ACS_13_17 /pop,
+  other_euro = dmv_lang$Age5p_OthEuro_ACS_13_17 / pop, # such as Romanian
+  tagalog = dmv_lang$Age5p_Tagalog_ACS_13_17 / pop, # phillipine
+  others = dmv_lang$Age5p_OthUnSp_ACS_13_17 / pop # unspecified
+)
+```
+
+```{r}
+dmv_lang_pct <- dmv_lang_pct %>%
+  gather(key= "lang", value="pct", -c(state, low_response_rate))
+str(dmv_lang_pct)
+head(dmv_lang_pct)
+```
+```{r}
+
+```
+
+
+
+```{r, fig.asp=1, fig.width=10}
+dmv_lang_pct %>%
+  ggplot(mapping = aes(y=low_response_rate, x=pct,  color=lang)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(color = "black", method = "lm") +
+  facet_wrap(~lang, nrow = 4, scale = "free_x")
+```
+```{r, fig.asp=1, fig.width=10}
+dmv_lang_pct %>%
+  ggplot(mapping = aes(y=low_response_rate, x=pct,  color=lang)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(color = "black", method = "lm") +
+  facet_wrap(~lang*state, nrow = 4, scale = "free_x")
+```
+
+```{r}
+dmv_lang_pct %>%
+  #filter(lang == "english" | lang == "viet") %>%
+  ggplot() +
+  geom_boxplot(mapping = aes(y = low_response_rate, x = lang))
+```
+
+```{r}
+unique(dmv_lang_pct$lang)
+```
+
+```{r}
+dmv_lang_pct %>%
+  filter(!is.na(low_response_rate)) %>%
+  group_by(lang) %>%
+  summarise(
+    median = median(low_response_rate),
+    mean = mean(low_response_rate)
+  )
+```
+
+
+
+
+
+```{r}
+lm_lang <- lm(low_response_ ~ pct, data = dmv_lang_pct)
+summary(lm_lang)
+```
+
+```{r}
+eng <- dmv_lang_pct %>% filter(lang == "english")
+lm_eng <- lm(low_response_rate ~ pct, data = eng)
+summary(lm_eng)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+household <- tractData$Tot_Occp_Units_ACS_13_17
+# limited english speaking household with --- as the main language for communication in household.
+dmv_lang_house_pct <- data.frame(
+  state = dmv_lang$State_name,
+  response_rate = dmv_lang$Low_Response_Score,
+  spanish = dmv_lang$ENG_VW_SPAN_ACS_13_17 / household,
+  indo_euro = dmv_lang$ENG_VW_INDO_EURO_ACS_13_17 / household,
+  asianPI = dmv_lang$ENG_VW_API_ACS_13_17 / household,
+  other = dmv_lang$ENG_VW_OTHER_ACS_13_17 / household,
+  no_english = dmv_lang$ENG_VW_ACS_13_17 / household
+)
+#dmv_lang_house_pct %>%
+#  dmv_lang_house_pct$english = 1 - spanish - indo_euro - asianPI - other - no_english
+str(dmv_lang_house_pct)
+```
+```{r}
+dmv_lang$ENG_VW_SPAN_ACS_13_17 / household
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
