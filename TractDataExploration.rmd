@@ -1,39 +1,44 @@
 ---
-author: "Liying Lu"
 title: "Tract Data Exploration"
-output: html_notebook
+author: "Liying Lu"
+output:
+  pdf_document: default
+  html_notebook: default
 ---
 ```{r}
-library(dplyr)
-library(tidyverse)
-library(factoextra)
-library(ggplot2)
-library(corrplot)
-library(ggpubr)
+# impoart package
+suppressWarnings(suppressPackageStartupMessages(library(dplyr)))
+suppressWarnings(suppressPackageStartupMessages(library(tidyverse)))
+suppressWarnings(suppressPackageStartupMessages(library(factoextra)))
+suppressWarnings(suppressPackageStartupMessages(library(ggplot2)))
+suppressWarnings(suppressPackageStartupMessages(library(corrplot)))
+suppressWarnings(suppressPackageStartupMessages(library(ggpubr)))
+suppressWarnings(suppressPackageStartupMessages(library(FactoMineR)))
+suppressWarnings(suppressPackageStartupMessages(library(missMDA)))
+suppressWarnings(suppressPackageStartupMessages(library(ggfortify)))
 ```
 
 
-## What advice would you give local governments who wish to improve the response to the 2020 census?
-```{r}
+**Question: What advice would you give local governments who wish to improve the response to the 2020 census?**
+
+# Data transformation
+
+```{r read data}
 # import data
-tractData <- read.csv("~/PersonalProject/DataFestPrep/data/2019PlanningDatabaseTractData/pdb2019trv6_us.csv")
-```
-```{r}
-names(tractData)
+tractData <- 
+  read.csv("~/PersonalProject/DataFestPrep/data/2019PlanningDatabaseTractData/pdb2019trv6_us.csv")
 ```
 
 Get a smaller dataset by subsetting only the data in DMV region. D.C. Maryland and Virginia. 
-```{r}
+```{r subset dmv data}
 tractDMV <- tractData %>%
   filter(State_name=="Virginia" |
            State_name=="Maryland" | 
            State_name=="District of Columbia")
-
-head(tractDMV)
 ```
 
 Summary statistics of the low_response_score on each state.
-```{r}
+```{r summary statistics}
 print(summary(tractDMV$Low_Response_Score))
 maryland <- filter(tractDMV, State_name=="Maryland")
 print(summary(maryland$Low_Response_Score))
@@ -43,30 +48,36 @@ dc <- filter(tractDMV, State_name=="District of Columbia")
 print(summary(dc$Low_Response_Score))
 ```
 
-### Cultural: Race, Language spoken, Citizenship
-**Total Population**: Columns 14, 15
-**Low Response Rate**: Columns 284
-**Race**: Columns 46-66
-**Language spoken**: Columns 69-96 and 179-188
-**Citizenship**: Columns 145-152
-```{r}
+**Cultural: Race, Language spoken, Citizenship**  
+-  **Total Population**: Columns 14, 15  
+-  **Low Response Rate**: Columns 284  
+-  **Race**: Columns 46-66  
+-  **Language spoken**: Columns 69-96 and 179-188  
+-  **Citizenship**: Columns 145-152  
+
+
+These subsets include both the American Community Survey (ACS) and ACS margin of error (ACSMOE) data, but only the ACS data will be taken into consideration.  
+```{r subset cultural data}
 # get the cultural dataset for DMV region
 dmv_cultural <- tractDMV %>% select(c(3,5,284,(14:15),(46:66),(69:96), (179:188), (145:152)))
 dmv_race <- tractDMV %>% select(c(3,5,284,(46:66)))
-dmv_lang <- tractDMV %>% select(c(3,5,284,(69:96), (179:188)))
-dmv_citizen <- tractDMV %>% select(c(284, (145:152)))
-dmv_pop <- tractDMV %>% select((14:15))
+dmv_lang <- tractDMV %>% select(c(3,5,284,(69:96),(179:188)))
+dmv_citizen <- tractDMV %>% select(c(3,5,284,(145:152)))
+dmv_pop <- tractDMV %>% select(c(3,5,(14:15)))
 ```
 
-## Race
-```{r}
+
+
+# Race  
+```{r race data}
+# subset the columns for different races 
 dmv_race <- dmv_race %>%
   select(-contains("MOE"))
 #names(dmv_race)
 pop <- dmv_pop$Tot_Population_ACS_13_17
 dmv_race_pct <- data.frame(
   state = dmv_race$State_name,
-  low_response_rate = dmv_race$Low_Response_Score,         # response rate
+  low_response_rate = dmv_race$Low_Response_Score, # response rate
   white = dmv_race$NH_White_alone_ACS_13_17 / pop, # white
   black = dmv_race$NH_Blk_alone_ACS_13_17 / pop,   # black or African American
   aian = dmv_race$NH_AIAN_alone_ACS_13_17 / pop,   # American Indian and Alaska Native
@@ -76,73 +87,151 @@ dmv_race_pct <- data.frame(
   )
 unique(dmv_race_pct$state)
 ```
-```{r}
+
+```{r gather race pct}
+# Gather the different columns (race) into a single column with their percentage as a single column.
 dmv_race_pct <- dmv_race_pct %>%
   gather(key = "race", value = "pct", -c(state,low_response_rate))
-dmv_race_pct
+head(dmv_race_pct)
 ```
 
-```{r}
+## Race: Plot
+The following plots are the plots of low response rate for each race with a linear regression projection. `pct` is the percentage of people who participated in the census belonging to the particular race. `low_response_rate` indicates how likely the particular race would not respond to the census, so the lower the `low_response_rate` is better.  
+The plots show that the Black, American Indians, Native Hawaiians, and other minority races have an increasing trend of low response rate as the percentage of these races increase in the census participants. Out of which, Black has the most significant increasing trend, indicating that the blacks are least likely to participate in the Census.   
+Asian and white have a decreasing trend as the percentage of these races increase in the census participants. White has the greatest decreasing trend, indicating that the whites are most likely to participant in the Census.  
+
+```{r low-response-rate by race pct, fig.height=10, fig.width=15}
 race_stats <- data.frame(summary(dmv_race_pct))
 dmv_race_pct %>%
   ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
   geom_point(alpha = 0.35) +
   geom_smooth(color = "black", alpha = 0.8, se=TRUE, method = "lm") +
-  facet_wrap(~race, nrow=2, scale = "free_x")
+  facet_wrap(~race, nrow=2, scale = "free_x") + 
+  ggtitle("Low response rate for each race")
 ```
-```{r, fig.asp=1, fig.width=10}
+
+
+The following plots shows the low response rate for each race in each DMV region. I would like to highlight the following races due to the strong and consistent trend shown in their low response rate in all three regions.
+- Blacks have an increasing trend in all three regions, indicating that the blacks are less likely to participate in Census in all three regions.  
+- Whites have a decreasing trend in all three regions, indicating that the whites are more likely to participate in Census in all three regions.   
+
+The rest of the races have less strong trend in their low response rate.  
+- American Indians show a discrepancy in their low response rate. There is a decreasing trend in D.C. and an increasing trend in Maryland and Virginia.  
+- Asians, Native Hawaiians, and other minority races maintain a general decreasing trend in all three regions, each with differnt strength.  
+
+```{r low-response-rate vs race pct by state, fig.asp=1, fig.width=15}
 race_stats <- data.frame(summary(dmv_race_pct))
 dmv_race_pct %>%
   ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
   geom_point(alpha = 0.35) +
   geom_smooth(color = "black", alpha = 0.8, se=TRUE, method = "lm") +
-  facet_wrap(~race*state, nrow=2, scale = "free_x")
+  facet_wrap(~race*state, nrow=2, scale = "free_x") + 
+  ggtitle("Low response rate for each race in each DMV region")
 ```
 
-```{r}
+
+Here, we take a closer look at the other races besides the whites and the blacks. Because these two races have more data points that the other races, the two plots above may not show the trend clearly. The plots show that there is no significant trend in the rest of the races as the trend lines are close to horizontal.  
+```{r low_response_rate vs race pct except white and black}
 dmv_race_pct %>%
   filter(!(race == "white" | race == "black" )) %>%
   ggplot(mapping = aes(y = low_response_rate, x = pct, color=race)) +
   geom_point(alpha = 0.35) +
   geom_smooth(color = "black", alpha = 0.8, se=TRUE) +
-  facet_wrap(~race, nrow=2, scale = "free_x")
+  facet_wrap(~race, nrow=2, scale = "free_x") + 
+  ggtitle("")
 ```
 
-```{r}
-# create a linear model for the black and white race
+Next, I will create linear models and correlation tests on the relationship between low response rate and the race white and black.  
+
+## Race: Linear model for the black
+I used a linear model to examine the relationship between the low response rate and the two races, white and black. The p-value for the slope is less than 0.05, indicating that there is a positive trend between the low response rate and the race black. However, the adjusted r-squared is only 0.4305, indicating that only 43% of variance of the low response rate is explained by the percentage of black in the participants of the Census. Therefore, this is not a very good model for predicting low response rate.  
+
+```{r lm: LRR vs black pct}
+# compute a linear model
 race_black <- dmv_race_pct %>% filter(race == "black")
 lm_black <- lm(low_response_rate ~ pct, data = race_black)
 summary(lm_black)
 ```
-```{r}
-cor.test(race_black$low_response_rate, race_black$pct)
+### Assumption checking for LM between percentage of black and low response rate
+
+```{r linear model plot for black vs LRR}
+ggplot(data = race_black, aes(pct,low_response_rate)) +
+  stat_summary(fun.data = mean_cl_normal) +
+  geom_smooth(method='lm')
 ```
-```{r}
-lm_black2 <- lm(low_response_rate ~ pct * state, data = race_black)
-summary(lm_black2)
+
+Now I would check the assumptions of the linear model for low response rate and percentage of black.
+-  Homoscedasticity: The Scale-Location shows that the points are concentrated on the left side of the graph, so the points do have equal variances. The conidtion of homoscendasticity is not filfilled.  
+-  Normality: The normal QQ plot curves upwards instead of having a linear line with at least three outliers in the upper right corner. The condition of normality is not fulfilled.  
+- Indenpendence of observations: Since the data entries are obtained by the American Community Survey for different area, I assume that the observations are independent.   
+The Residual vs Leverage plot also shows that there are at least three observations (3169, 1083, and 1106) which could influence the regression result.   
+Since only one out of three assumptions for a linear relationship is fulfilled, the linear model fitting the low response rate by the percentage of black is not reliable. I would not move on to building a new model with the influential cases removed because the non linearity in the Normal Q-Q plot and the uneven spread of the residuals in the Residuals vs Fitted plot are sufficient to inform that the data is not suitable for fitting a linear model.  
+```{r assumption check for lm_black, fig.height=10, fig.width=15}
+# Create the plot
+autoplot(lm_black, which = c((1:3), 5), ncol=2, label.size = 5, alpha = 0.3)
 ```
 
 
-```{r}
-# create a linear model for the black and white race
+
+### Correlation between the percentage of blacks and low response rate
+The correlation test for the percentage of black and low response rate has a correlation coefficient of 0.66 with a p-value of less than 2.2e-16. The p-value is less than the significance level alpha = 0.05. We can conclude that the percentage of black and the low response rate has a moderate positive correlation.   
+```{r correlation test for black pct and LRR}
+# correlation test for black with low response rate
+cor.test(race_black$low_response_rate, race_black$pct, method="pearson")
+```
+
+
+## Race: Linear model for percentage of white and low response rate
+
+Here I created a linear model for the percentage of white and the low response rate. The adjusted r-squared is 0.5216 with a p-value of less than 2.2e16. Since the p-value is less than the significance level alpha 0.05, we can conclude that about 52% of the variance in the low response rate can be explained by the percentage of white.   
+```{r linaer model for white vs LRR}
+# linear model for white race with low response rate
 race_white <- dmv_race_pct %>% filter(race == "white")
 lm_white <- lm(low_response_rate ~ pct, data = race_white)
 summary(lm_white)
 ```
-```{r}
-cor.test(race_white$low_response_rate, race_white$pct)
+### Assumption checking for LM between percentage of white and low response rate
+
+
+```{r linear model plot for lm_white}
+ggplot(data = race_white, aes(pct,low_response_rate)) +
+  stat_summary(fun.data = mean_cl_normal) +
+  geom_smooth(method='lm')
 ```
-```{r}
-lm_white2 <- lm(low_response_rate ~ pct + state, data = race_white)
-summary(lm_white2)
+
+Now I would check the assumptions of the linear model for low response rate and percentage of white.  
+-  Homoscedasticity: The Scale-Location plot shows evenly spread out points with the exception of three outliers on the upper left corner. I would consider that the condition of homoscedasticity is fulfilled.    
+-  Normality: The Normarl Q-Q plot shows a curved line with many outliers in the upper right corner, so the condition of normality is not fulfilled.   
+-  Indenpendence of the observations: Since the data entries are obtained by the American Community Survey for different area, I assume that the observations are independent.    
+The Residual vs Leverage plot also shows that there are at least three influential points (2498, 3169, and one other points) which could affect the regression result.    
+Since only two out of three assumptions for a linear relationship is fulfilled, the model is not reliable. I would stop here on the linear model for low response rate and the percentage of white because the Normal Q-Q plot shows that there are too many outliers.   
+```{r assumption checking for lm_white, fig.height=10, fig.width=15}
+# Create the plot
+autoplot(lm_white, which = c((1:3), 5), ncol=2, label.size = 5, alpha = 0.3)
 ```
-```{r}
+
+
+
+
+The correlation test for the percentage of white and low response rate has a correlation coefficient of -0.72 with a p-value of less than 2.2e-16. The p-value is less than the significance level alpha = 0.05. We can conclude that the percentage of black and the low response rate has a moderate positive correlation.   
+```{r correlation test for white vs LRR}
+# correlation test for percentage of white and low response rate
+cor.test(race_white$low_response_rate, race_white$pct, method="pearson")
+```
+
+## Race: Conclusion
+The scatter plots of low_response_rate by the percentage of race shows that the percentage of black and white have the strongest trend with the low response rate. The low response rate increases as the percentage of black increases and decreases as the percentage of white increases. The higher the low response rate, the corresponding area have less people responding to the Census. Although the linear models built to use either race to estimate the low response rate are both unreliable, there is a high correlation between the two races and low response rate. White has a -0.72 and Black has a 0.66 correlation statistic from the Pearson's correlation test both with p-values less than 2.2e-16. Thus, I conclude that the percentage of white and black in a community is moderately correlated with the low response rate.   
+
+# Language spoken
+
+Here I created a dataset which includes the low response rate and the percentage of people age 5 years or older speaking a certain language.  
+
+```{r unique language spoken}
 unique(dmv_lang$State_name)
 names(dmv_lang)
 ```
 
-
-```{r}
+```{r pct of people speaking certain language}
 # person of age 5 years or older who speak english less than very well who speak ----.  
 dmv_lang_pct <- data.frame(
   state = dmv_lang$State_name,
@@ -162,26 +251,24 @@ dmv_lang_pct <- data.frame(
 )
 ```
 
-```{r}
+```{r transform the language pct dataset}
 dmv_lang_pct <- dmv_lang_pct %>%
   gather(key= "lang", value="pct", -c(state, low_response_rate))
-str(dmv_lang_pct)
-head(dmv_lang_pct)
-```
-```{r}
-
 ```
 
+## Language spoken: plots
+The plots here shows the low response rate by the percentage of people speaking a certain language. The plot for English shows a decreasing trend line with a narrow confidence interval. Other languages show a large confidence intervals around their trend lines, so I conclude that only English might be useful to estimate the low response rate in a linear model.  
 
-
-```{r, fig.asp=1, fig.width=10}
+```{r plots for pct lang by LRR, fig.asp=1, fig.width=15}
 dmv_lang_pct %>%
   ggplot(mapping = aes(y=low_response_rate, x=pct,  color=lang)) +
   geom_point(alpha = 0.5) +
   geom_smooth(color = "black", method = "lm") +
   facet_wrap(~lang, nrow = 4, scale = "free_x")
 ```
-```{r, fig.asp=1, fig.width=10}
+
+The plots below show the percentage of people speaking certain language by low response rate and states. Plots which have narrow confidence intervals around the linear model line are English in Maryland and Virginia, and Spanish in Virginia. 
+```{r plots for pct lang by LRR and by states, fig.asp=1, fig.width=15}
 dmv_lang_pct %>%
   ggplot(mapping = aes(y=low_response_rate, x=pct,  color=lang)) +
   geom_point(alpha = 0.5) +
@@ -189,115 +276,72 @@ dmv_lang_pct %>%
   facet_wrap(~lang*state, nrow = 4, scale = "free_x")
 ```
 
+## Language Spoken: Conclusion
+Concluding from the scatter plots and the linear model trend line, I conclude that there may be a negative relation between the percentage of people speaking English and the low response rate in both Maryland and Virginia. There may be a positive relationship between the percentage of people speaking Spanish and the low response rate in Virginia. A positive relationship between the percentage of language spoken and the low response rate indicates that the area would have less people responding to the Census if the percentage of people speaknig a certain language incerases. A negative relationship means more people respond to the Census if the percentage of people speaking the language increases. Further correlation tests and linear model assumption check should be done to confirm this claim.  
+
+# Perform Principle Component Analysis on the cultural columns.
+This section is a practice for performing PCA for feature grouping. No conclusion will be made here. 
+
 ```{r}
-dmv_lang_pct %>%
-  #filter(lang == "english" | lang == "viet") %>%
-  ggplot() +
-  geom_boxplot(mapping = aes(y = low_response_rate, x = lang))
+cultural <- dmv_cultural[, -c(1:2)] # remove the state and county
+nb = estim_ncpPCA(cultural, ncp.max = 4)
+cultural.comp = imputePCA(cultural, ncp=4)
+cultural.pca <- PCA(cultural.comp$completeObs)
+```
+```{r}
+get_eig(cultural.pca)
+```
+```{r}
+# visualize eigenvalues/variances
+fviz_screeplot(cultural.pca, addlabels=TRUE, ylim=c(0, 35))
 ```
 
 ```{r}
-unique(dmv_lang_pct$lang)
+# Extract the result for variables
+var <- get_pca(cultural.pca, "var")
+var
+```
+```{r}
+head(var$coord)
+```
+```{r}
+head(var$contrib)
+```
+```{r}
+fviz_pca_var(cultural.pca, col.var = "contrib",
+             gradiant.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = FALSE) # avoid text overlapping
+```
+
+
+## PCA on race
+```{r}
+race <- dmv_race[, -c(1:2)] # remove the state and county
+nb = estim_ncpPCA(race, ncp.max = 4)
+race.comp = imputePCA(race, ncp=2)
+race.pca <- PCA(race.comp$completeObs)
+```
+```{r}
+get_eig(race.pca)
+```
+```{r}
+# visualize eigenvalues/variances
+fviz_screeplot(race.pca, addlabels=TRUE, ylim=c(0, 35))
 ```
 
 ```{r}
-dmv_lang_pct %>%
-  filter(!is.na(low_response_rate)) %>%
-  group_by(lang) %>%
-  summarise(
-    median = median(low_response_rate),
-    mean = mean(low_response_rate)
-  )
-```
-
-
-
-
-
-```{r}
-lm_lang <- lm(low_response_ ~ pct, data = dmv_lang_pct)
-summary(lm_lang)
-```
-
-```{r}
-eng <- dmv_lang_pct %>% filter(lang == "english")
-lm_eng <- lm(low_response_rate ~ pct, data = eng)
-summary(lm_eng)
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-household <- tractData$Tot_Occp_Units_ACS_13_17
-# limited english speaking household with --- as the main language for communication in household.
-dmv_lang_house_pct <- data.frame(
-  state = dmv_lang$State_name,
-  response_rate = dmv_lang$Low_Response_Score,
-  spanish = dmv_lang$ENG_VW_SPAN_ACS_13_17 / household,
-  indo_euro = dmv_lang$ENG_VW_INDO_EURO_ACS_13_17 / household,
-  asianPI = dmv_lang$ENG_VW_API_ACS_13_17 / household,
-  other = dmv_lang$ENG_VW_OTHER_ACS_13_17 / household,
-  no_english = dmv_lang$ENG_VW_ACS_13_17 / household
-)
-#dmv_lang_house_pct %>%
-#  dmv_lang_house_pct$english = 1 - spanish - indo_euro - asianPI - other - no_english
-str(dmv_lang_house_pct)
+# Extract the result for variables
+var <- get_pca(race.pca, "var")
+var
 ```
 ```{r}
-dmv_lang$ENG_VW_SPAN_ACS_13_17 / household
-
+head(var$coord)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+head(var$contrib)
+```
+```{r}
+fviz_pca_var(race.pca, col.var = "contrib",
+             gradiant.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE) # avoid text overlapping
+```
